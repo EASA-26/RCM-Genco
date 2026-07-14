@@ -1719,12 +1719,8 @@ export default function RCMDashboard() {
           <p className="topbar-subtitle">Aspirasi RT2.0 styled maintenance intelligence for generation assets.</p>
         </div>
         <div className="topbar-right">
-          <div className="theme-lockup" aria-label="Aspirasi RT2.0 theme">
-            <span className="theme-mark" aria-hidden="true" />
-            <div>
-              <strong>ASPIRASI RT2.0</strong>
-              <small>Better. Brighter.</small>
-            </div>
+          <div className="brand-lockup" aria-label="TNB Genco">
+            <img alt="TNB Genco" src="tnb-genco-logo.png" />
           </div>
           <div className="top-actions">
             <label className="file-button">
