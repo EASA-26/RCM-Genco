@@ -16,8 +16,8 @@ export const metadata: Metadata = {
   title: "RCM Genco",
   description: "RCM Genco dashboard for maintenance strategy analysis.",
   icons: {
-    icon: "/tnb-genco-favicon.png",
-    shortcut: "/tnb-genco-favicon.png",
+    icon: "/rcm-favicon.png",
+    shortcut: "/rcm-favicon.png",
   },
 };
 
