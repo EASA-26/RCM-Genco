@@ -990,7 +990,7 @@ function patchSlideTexts(xml: string, replacements: { includes: string; text: st
 }
 
 async function exportPatchedPptx(summary: AnalysisSummary, meta: ReportMeta) {
-  const response = await fetch("/report-template.pptx");
+  const response = await fetch(new URL("report-template.pptx", window.location.href));
   if (!response.ok) {
     throw new Error("The PowerPoint template could not be loaded.");
   }
