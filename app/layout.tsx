@@ -13,11 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Starter Project",
-  description: "A clean starting point for building your site.",
+  title: "RCM Genco",
+  description: "RCM Genco dashboard for maintenance strategy analysis.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/tnb-genco-favicon.png",
+    shortcut: "/tnb-genco-favicon.png",
   },
 };
 
