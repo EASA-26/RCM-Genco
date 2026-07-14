@@ -51,6 +51,7 @@ type WorkCenterSummary = {
 type AnalysisSummary = {
   fileName: string;
   sheetName: string;
+  sourceRows: CellValue[][];
   rows: RCMRow[];
   totalRows: number;
   functionsExisting: number;
@@ -303,7 +304,12 @@ function chooseBestSheet(sheets: SheetData[]) {
   return best;
 }
 
-function summarizeRows(fileName: string, sheetName: string, rows: RCMRow[]): AnalysisSummary {
+function summarizeRows(
+  fileName: string,
+  sheetName: string,
+  sourceRows: CellValue[][],
+  rows: RCMRow[],
+): AnalysisSummary {
   const existingRows = rows.filter((row) => row.implemented);
   const actionableRows = rows.filter((row) => strategyIsActionable(row.recommendedStrategy));
   const executableRows = actionableRows.filter((row) => row.implemented);
@@ -361,6 +367,7 @@ function summarizeRows(fileName: string, sheetName: string, rows: RCMRow[]): Ana
   return {
     fileName,
     sheetName,
+    sourceRows,
     rows,
     totalRows: rows.length,
     functionsExisting: uniqueCount(existingRows, (row) => row.functionText),
@@ -666,7 +673,7 @@ async function buildAnalysisFromFile(file: File) {
     throw new Error("No RCM rows were found. Check that the raw data headers are present.");
   }
 
-  return summarizeRows(file.name, bestSheet.name, rcmRows);
+  return summarizeRows(file.name, bestSheet.name, bestSheet.rows, rcmRows);
 }
 
 function pct(value: number, total: number) {
@@ -824,7 +831,10 @@ function encodeText(value: string) {
   return new TextEncoder().encode(value);
 }
 
-function createZip(entries: Map<string, Uint8Array>) {
+function createZip(
+  entries: Map<string, Uint8Array>,
+  type = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+) {
   const centralParts: Uint8Array[] = [];
   const localParts: Uint8Array[] = [];
   let offset = 0;
@@ -875,9 +885,246 @@ function createZip(entries: Map<string, Uint8Array>) {
   writeUint32(end, 12, centralSize);
   writeUint32(end, 16, offset);
 
-  return new Blob([...localParts, ...centralParts, end], {
-    type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  });
+  return new Blob([...localParts, ...centralParts, end], { type });
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function escapeXml(value: CellValue | string) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function columnName(index: number) {
+  let value = index + 1;
+  let name = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    value = Math.floor((value - 1) / 26);
+  }
+  return name;
+}
+
+function cellReference(rowIndex: number, columnIndexValue: number) {
+  return `${columnName(columnIndexValue)}${rowIndex + 1}`;
+}
+
+function sheetRange(rowCount: number, columnCount: number) {
+  return `A1:${columnName(Math.max(0, columnCount - 1))}${Math.max(1, rowCount)}`;
+}
+
+function cellXml(value: CellValue, rowIndex: number, columnIndexValue: number) {
+  const ref = cellReference(rowIndex, columnIndexValue);
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<c r="${ref}"><v>${value}</v></c>`;
+  }
+  if (typeof value === "boolean") {
+    return `<c r="${ref}" t="b"><v>${value ? 1 : 0}</v></c>`;
+  }
+  return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+}
+
+function rowsToSheetData(rows: CellValue[][]) {
+  return rows
+    .map((row, rowIndex) => {
+      const cells = row.map((value, columnIndexValue) => cellXml(value, rowIndex, columnIndexValue)).join("");
+      return `<row r="${rowIndex + 1}">${cells}</row>`;
+    })
+    .join("");
+}
+
+function replaceSheetRows(xml: string, rows: CellValue[][], columnCount: number) {
+  const dimension = sheetRange(rows.length, columnCount);
+  let next = xml.replace(/<dimension[^>]*\/>/, `<dimension ref="${dimension}"/>`);
+  next = next.replace(/<sheetData>[\s\S]*?<\/sheetData>/, `<sheetData>${rowsToSheetData(rows)}</sheetData>`);
+  return next;
+}
+
+function patchTableReference(xml: string, ref: string) {
+  return xml
+    .replace(/\bref="[^"]+"/, `ref="${ref}"`)
+    .replace(/<autoFilter\b([^>]*)ref="[^"]+"/, `<autoFilter$1ref="${ref}"`)
+    .replace(/<sortState\b([^>]*)ref="[^"]+"/, `<sortState$1ref="A2:${ref.split(":")[1]}"`);
+}
+
+function patchWorkbookCalculation(xml: string) {
+  const calcPr =
+    '<calcPr calcId="191029" calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>';
+  if (/<calcPr\b[\s\S]*?\/>/.test(xml)) {
+    return xml.replace(/<calcPr\b[\s\S]*?\/>/, calcPr);
+  }
+  return xml.replace("</workbook>", `${calcPr}</workbook>`);
+}
+
+function removeRelationship(xml: string, targetIncludes: string) {
+  return xml.replace(
+    new RegExp(`<Relationship\\b[^>]*Target="[^"]*${targetIncludes.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*/>`, "g"),
+    "",
+  );
+}
+
+function removeContentTypeOverride(xml: string, partName: string) {
+  return xml.replace(
+    new RegExp(`<Override\\b[^>]*PartName="/${partName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*/>`, "g"),
+    "",
+  );
+}
+
+function buildQueryRows(summary: AnalysisSummary): CellValue[][] {
+  const duplicateCounts = countBy(summary.rows, (row) => row.duplicateKey.toLowerCase());
+  return [
+    [
+      "Site",
+      "RCM_ID",
+      "RCM_No",
+      "Version",
+      "Reference",
+      "Function",
+      "Function_Failure",
+      "Failure_Mode",
+      "Failure_Effect",
+      "Analysis_Tracking",
+      "Recommended_Strategy",
+      "Proposed_Task",
+      "Interval",
+      "Work_Center",
+      "Implemented",
+      "KKS_Code",
+      "Previous_Proposed_Task",
+      "Previous_Interval",
+      "Column1",
+      "Column2",
+      "Column3",
+      "Column4",
+      "Failure_Mode+Proposed_Task",
+      "Count",
+      "Duplicate",
+    ],
+    ...summary.rows.map((row) => {
+      const count = duplicateCounts.get(row.duplicateKey.toLowerCase()) ?? 1;
+      return [
+        row.site,
+        row.rcmId,
+        row.rcmNo,
+        row.version,
+        row.reference,
+        row.functionText,
+        row.functionFailure,
+        row.failureMode,
+        row.failureEffect,
+        row.analysisTracking,
+        row.recommendedStrategy,
+        row.proposedTask,
+        row.interval,
+        row.workCenter,
+        row.implemented,
+        row.kksCode,
+        row.previousProposedTask,
+        row.previousInterval,
+        "",
+        "",
+        "",
+        "",
+        row.duplicateKey,
+        count,
+        count > 1 ? "Duplicate" : "Unique",
+      ];
+    }),
+  ];
+}
+
+type ComparisonRow = {
+  current: CellValue[];
+  recommended: CellValue[];
+};
+
+function buildComparisonRows(summary: AnalysisSummary): ComparisonRow[] {
+  return summary.rows
+    .filter((row) => strategyIsActionable(row.recommendedStrategy))
+    .map((row, index) => {
+      const currentTask = row.previousProposedTask && row.previousProposedTask !== "0"
+        ? row.previousProposedTask
+        : row.proposedTask;
+      const currentInterval = row.previousInterval && row.previousInterval !== "0"
+        ? row.previousInterval
+        : row.interval;
+      return {
+        current: row.implemented
+          ? [index + 1, row.reference, row.failureMode, currentTask, currentInterval, row.workCenter]
+          : ["", "", "", "", "", ""],
+        recommended: [
+          index + 1,
+          row.reference,
+          row.failureMode,
+          row.proposedTask,
+          row.interval,
+          row.workCenter,
+          row.implemented ? "No change" : "Added new",
+        ],
+      };
+    });
+}
+
+function buildCurrentVsRcmRows(summary: AnalysisSummary): CellValue[][] {
+  const rows: CellValue[][] = [
+    [
+      "Current Maintenance Plan (TRUE)",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "RCM Recommended Maintenance Plan (TRUE+FALSE)",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+    ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    [
+      "No",
+      "Ref",
+      "Failure Mode",
+      "Proposed Task",
+      "Interval",
+      "Trade",
+      "Type Of Asset",
+      "Remarks",
+      "",
+      "No",
+      "Ref",
+      "Failure Mode",
+      "Proposed Task",
+      "Interval",
+      "Trade",
+      "Remarks",
+    ],
+  ];
+  for (const row of buildComparisonRows(summary)) {
+    rows.push([...row.current, "", "", "", ...row.recommended]);
+  }
+  return rows;
 }
 
 function setTextCache(doc: Document, cache: Element | undefined, values: string[]) {
@@ -989,6 +1236,259 @@ function patchSlideTexts(xml: string, replacements: { includes: string; text: st
   return new XMLSerializer().serializeToString(doc);
 }
 
+function setTextNodesText(container: ParentNode, value: string) {
+  const textNodes = elementsByLocalName(container, "t");
+  if (!textNodes.length) {
+    return;
+  }
+  textNodes[0].textContent = value;
+  for (const node of textNodes.slice(1)) {
+    node.textContent = "";
+  }
+}
+
+function setTableCellText(cell: Element, value: CellValue) {
+  setTextNodesText(cell, String(value ?? ""));
+}
+
+function tableRows(table: Element) {
+  return Array.from(table.childNodes).filter(
+    (node): node is Element => node instanceof Element && node.localName === "tr",
+  );
+}
+
+function tableCells(row: Element) {
+  return Array.from(row.childNodes).filter(
+    (node): node is Element => node instanceof Element && node.localName === "tc",
+  );
+}
+
+function firstTable(doc: Document) {
+  return firstElementByLocalName(doc, "tbl");
+}
+
+function blankShapeTexts(xml: string, includes: string[]) {
+  const doc = parseXml(xml);
+  for (const shape of [...elementsByLocalName(doc, "sp"), ...elementsByLocalName(doc, "graphicFrame")]) {
+    const fullText = elementsByLocalName(shape, "t")
+      .map((node) => node.textContent ?? "")
+      .join("");
+    if (includes.some((item) => fullText.includes(item))) {
+      setTextNodesText(shape, "");
+    }
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function removePicturesByRelationship(xml: string, relIds: string[]) {
+  const doc = parseXml(xml);
+  for (const pic of elementsByLocalName(doc, "pic")) {
+    const blip = firstElementByLocalName(pic, "blip");
+    const relId =
+      blip?.getAttribute("r:embed") ??
+      blip?.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "embed");
+    if (relId && relIds.includes(relId)) {
+      pic.parentNode?.removeChild(pic);
+    }
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function blankTextRuns(xml: string, terms: string[]) {
+  const doc = parseXml(xml);
+  for (const node of elementsByLocalName(doc, "t")) {
+    const value = node.textContent ?? "";
+    if (terms.some((term) => value.includes(term))) {
+      node.textContent = "";
+    }
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function patchTeamMembersSlide(xml: string) {
+  const doc = parseXml(xml);
+  for (const shape of elementsByLocalName(doc, "sp")) {
+    const fullText = elementsByLocalName(shape, "t")
+      .map((node) => node.textContent ?? "")
+      .join("");
+    if (fullText.includes("System") && fullText.includes("Venue") && fullText.includes("Analysis date")) {
+      setTextNodesText(shape, "System \t\t:\nVenue \t\t:\nAnalysis date \t:");
+    }
+  }
+
+  const table = firstTable(doc);
+  if (table) {
+    tableRows(table).forEach((row, rowIndex) => {
+      if (rowIndex === 0) {
+        return;
+      }
+      const cells = tableCells(row);
+      cells.forEach((cell, cellIndex) => {
+        setTableCellText(cell, cellIndex === 0 ? rowIndex : "");
+      });
+    });
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function patchOperatingContextSlide(xml: string) {
+  const doc = parseXml(xml);
+  for (const shape of elementsByLocalName(doc, "sp")) {
+    const fullText = elementsByLocalName(shape, "t")
+      .map((node) => node.textContent ?? "")
+      .join("");
+    if (fullText.includes("Primary Function:")) {
+      setTextNodesText(shape, "Primary Function:\n\nOperating Context:\n\nReason of system selection:");
+    }
+    if (fullText.includes("Generator Transformers process flow and major parts")) {
+      setTextNodesText(shape, "");
+    }
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function patchSystemBoundarySlide(xml: string) {
+  let next = removePicturesByRelationship(xml, ["rId4"]);
+  next = blankShapeTexts(next, [
+    "List of components",
+    "The scope or limits of the RCM analysis",
+  ]);
+  return next;
+}
+
+function patchAuditSessionSlide(xml: string) {
+  return blankShapeTexts(xml, [
+    "No.NameRolePosition",
+    "Venue",
+    "The management of",
+    "Auditors",
+  ]);
+}
+
+function patchComparisonSlide(xml: string, rows: ComparisonRow[], startIndex: number, pageNumber: number) {
+  const doc = parseXml(xml);
+  const table = firstTable(doc);
+  if (table) {
+    const pptRows = tableRows(table);
+    const bodyRows = pptRows.slice(3);
+    bodyRows.forEach((row, offset) => {
+      const planRow = rows[startIndex + offset];
+      const values = planRow
+        ? [...planRow.current, "\u00a0", ...planRow.recommended]
+        : ["", "", "", "", "", "", "\u00a0", "", "", "", "", "", "", ""];
+      tableCells(row).forEach((cell, cellIndex) => setTableCellText(cell, values[cellIndex] ?? ""));
+    });
+  }
+  for (const shape of elementsByLocalName(doc, "sp")) {
+    const fullText = elementsByLocalName(shape, "t")
+      .map((node) => node.textContent ?? "")
+      .join("");
+    if (/^\d+$/.test(fullText.trim())) {
+      setTextNodesText(shape, String(pageNumber));
+    }
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function buildRecommendations(summary: AnalysisSummary, meta: ReportMeta) {
+  const topTrade = summary.workCenters[0];
+  const topStrategy = summary.topStrategies[0];
+  const duplicateCount = summary.duplicateRows.reduce((total, row) => total + row.duplicateCount, 0);
+  return [
+    `Endorse the ${summary.actionableTasks} proposed maintenance tasks for ${meta.assetName}, with priority given to the ${summary.pendingTasks} newly added tasks before ERMS upload.`,
+    `Assign task ownership by work centre and interval in the RCM Recommended Maintenance Plan${topTrade ? `, starting with ${topTrade.name} because it carries ${topTrade.total} task(s)` : ""}.`,
+    `Use the exported working file as the controlled task register so approved changes, current maintenance references, intervals and remarks remain traceable to the uploaded raw RCM data.`,
+    topStrategy
+      ? `Prioritise implementation controls for ${topStrategy.code} tasks, as this is the largest recommended strategy group in the analysis.`
+      : "Prioritise implementation controls for the highest-volume recommended strategy group in the analysis.",
+    duplicateCount
+      ? `Review duplicate failure-mode/task combinations before upload to reduce ERMS master-data duplication and align common tasks under one maintainable plan.`
+      : "Review the RCM register annually and after any major failure, plant modification or operating context change to keep the maintenance plan current.",
+  ];
+}
+
+function patchRecommendationSlide(xml: string, summary: AnalysisSummary, meta: ReportMeta) {
+  const doc = parseXml(xml);
+  const recommendations = buildRecommendations(summary, meta)
+    .map((item, index) => `${index + 1}.    ${item}`)
+    .join("\n\n");
+  for (const shape of elementsByLocalName(doc, "sp")) {
+    const fullText = elementsByLocalName(shape, "t")
+      .map((node) => node.textContent ?? "")
+      .join("");
+    if (fullText.includes("The station management is recommended")) {
+      setTextNodesText(shape, recommendations);
+    }
+    if (fullText.includes("Actions to be taken by station")) {
+      setTextNodesText(
+        shape,
+        `Actions to be taken by station to further improve the operation & maintenance practices of ${meta.assetName}.`,
+      );
+    }
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+
+async function exportWorkingFile(summary: AnalysisSummary, meta: ReportMeta) {
+  const response = await fetch(new URL("working-template.xlsm", window.location.href));
+  if (!response.ok) {
+    throw new Error("The working-file template could not be loaded.");
+  }
+
+  const zip = await ZipArchive.fromArrayBuffer(await response.arrayBuffer());
+  const entries = await zip.materialize();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const readEntryText = (name: string) => {
+    const bytes = entries.get(name);
+    if (!bytes) {
+      throw new Error(`${name} was not found in the working-file template.`);
+    }
+    return decoder.decode(bytes);
+  };
+
+  const sourceColumnCount = Math.max(24, summary.sourceRows[0]?.length ?? 24);
+  const queryRows = buildQueryRows(summary);
+  const currentVsRcmRows = buildCurrentVsRcmRows(summary);
+
+  entries.set(
+    "xl/worksheets/sheet2.xml",
+    encoder.encode(replaceSheetRows(readEntryText("xl/worksheets/sheet2.xml"), summary.sourceRows, sourceColumnCount)),
+  );
+  entries.set(
+    "xl/worksheets/sheet3.xml",
+    encoder.encode(replaceSheetRows(readEntryText("xl/worksheets/sheet3.xml"), queryRows, 25)),
+  );
+  entries.set(
+    "xl/worksheets/sheet5.xml",
+    encoder.encode(replaceSheetRows(readEntryText("xl/worksheets/sheet5.xml"), currentVsRcmRows, 16)),
+  );
+  entries.set(
+    "xl/tables/table1.xml",
+    encoder.encode(patchTableReference(readEntryText("xl/tables/table1.xml"), sheetRange(summary.sourceRows.length, 24))),
+  );
+  entries.set(
+    "xl/tables/table2.xml",
+    encoder.encode(patchTableReference(readEntryText("xl/tables/table2.xml"), sheetRange(queryRows.length, 25))),
+  );
+  entries.set("xl/workbook.xml", encoder.encode(patchWorkbookCalculation(readEntryText("xl/workbook.xml"))));
+  entries.set(
+    "xl/_rels/workbook.xml.rels",
+    encoder.encode(removeRelationship(readEntryText("xl/_rels/workbook.xml.rels"), "calcChain.xml")),
+  );
+  entries.set(
+    "[Content_Types].xml",
+    encoder.encode(removeContentTypeOverride(readEntryText("[Content_Types].xml"), "xl/calcChain.xml")),
+  );
+  entries.delete("xl/calcChain.xml");
+
+  const output = createZip(
+    entries,
+    "application/vnd.ms-excel.sheet.macroEnabled.12",
+  );
+  downloadBlob(output, `RCM Working File - ${meta.assetName || "Dashboard"}.xlsm`);
+}
+
 async function exportPatchedPptx(summary: AnalysisSummary, meta: ReportMeta) {
   const response = await fetch(new URL("report-template.pptx", window.location.href));
   if (!response.ok) {
@@ -1010,13 +1510,60 @@ async function exportPatchedPptx(summary: AnalysisSummary, meta: ReportMeta) {
   entries.set(
     "ppt/slides/slide1.xml",
     encoder.encode(
-      patchSlideTexts(slideOne, [
-        {
-          includes: "RCM Analysis Final Report",
-          text: `RCM Analysis Final Report ${meta.station} ${meta.assetName} Analysis Date : ${meta.analysisDate} Audit Session Date : ${meta.auditDate}`,
-        },
-      ]),
+      blankTextRuns(
+        removePicturesByRelationship(
+          patchSlideTexts(slideOne, [
+            {
+              includes: "RCM Analysis Final Report",
+              text: `RCM Analysis Final Report ${meta.station} ${meta.assetName} Analysis Date : ${meta.analysisDate} Audit Session Date : ${meta.auditDate}`,
+            },
+          ]),
+          ["rId3", "rId4"],
+        ),
+        [
+          "Ts. Wan Mohamad Erfan",
+          "Sr. Engineer",
+          "Planning)",
+          "Ir",
+          "Dinishkaran",
+          "Pillai",
+          "Principal Engineer",
+          "Head of Maintenance",
+          "Date: 3",
+          "October 2025",
+        ],
+      ),
     ),
+  );
+
+  entries.set("ppt/slides/slide5.xml", encoder.encode(patchTeamMembersSlide(getEntryText("ppt/slides/slide5.xml"))));
+  entries.set(
+    "ppt/slides/slide6.xml",
+    encoder.encode(patchOperatingContextSlide(getEntryText("ppt/slides/slide6.xml"))),
+  );
+  entries.set(
+    "ppt/slides/slide7.xml",
+    encoder.encode(patchSystemBoundarySlide(getEntryText("ppt/slides/slide7.xml"))),
+  );
+
+  const comparisonRows = buildComparisonRows(summary);
+  [9, 10, 11, 12].forEach((slideNumber, index) => {
+    entries.set(
+      `ppt/slides/slide${slideNumber}.xml`,
+      encoder.encode(
+        patchComparisonSlide(
+          getEntryText(`ppt/slides/slide${slideNumber}.xml`),
+          comparisonRows,
+          index * 14,
+          6 + index,
+        ),
+      ),
+    );
+  });
+
+  entries.set(
+    "ppt/slides/slide13.xml",
+    encoder.encode(patchAuditSessionSlide(getEntryText("ppt/slides/slide13.xml"))),
   );
 
   const slideFourteen = getEntryText("ppt/slides/slide14.xml");
@@ -1059,15 +1606,13 @@ async function exportPatchedPptx(summary: AnalysisSummary, meta: ReportMeta) {
   const chartTwo = getEntryText("ppt/charts/chart2.xml");
   entries.set("ppt/charts/chart2.xml", encoder.encode(patchBarChart(chartTwo, summary, meta)));
 
+  entries.set(
+    "ppt/slides/slide16.xml",
+    encoder.encode(patchRecommendationSlide(getEntryText("ppt/slides/slide16.xml"), summary, meta)),
+  );
+
   const output = createZip(entries);
-  const url = URL.createObjectURL(output);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `RCM Analysis Final Report - ${meta.assetName || "Dashboard"}.pptx`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  downloadBlob(output, `RCM Analysis Final Report - ${meta.assetName || "Dashboard"}.pptx`);
 }
 
 function MetricCard({ label, value, note }: { label: string; value: number | string; note: string }) {
@@ -1085,6 +1630,7 @@ export default function RCMDashboard() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isWorkingExporting, setIsWorkingExporting] = useState(false);
   const [reportMeta, setReportMeta] = useState<ReportMeta>({
     station: "Station",
     assetName: "Generator Transformers",
@@ -1141,6 +1687,21 @@ export default function RCMDashboard() {
     }
   }
 
+  async function handleWorkingFileExport() {
+    if (!summary) {
+      return;
+    }
+    setIsWorkingExporting(true);
+    setError("");
+    try {
+      await exportWorkingFile(summary, reportMeta);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The working-file export failed.");
+    } finally {
+      setIsWorkingExporting(false);
+    }
+  }
+
   const themeStyle = {
     "--theme-bg": "url('aspirasi-rt2-theme.png')",
   } as CSSProperties;
@@ -1168,6 +1729,9 @@ export default function RCMDashboard() {
             </label>
             <button disabled={!summary || isExporting} onClick={handleExport} type="button">
               {isExporting ? "Preparing PPT..." : "Export PowerPoint"}
+            </button>
+            <button disabled={!summary || isWorkingExporting} onClick={handleWorkingFileExport} type="button">
+              {isWorkingExporting ? "Preparing XLSM..." : "Export Working File"}
             </button>
           </div>
         </div>
