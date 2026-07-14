@@ -36,6 +36,7 @@ yarn-error.log*
 # typescript
 next-env.d.ts
 /dist/
+/local-dist/
 /pages-dist/
 /.wrangler/
 /.vinext/
@@ -44,6 +45,9 @@ next-env.d.ts
 /RCMAnalysisList*.xlsx
 /Template For Report*.xlsm
 /Report - CBSB_ - _Generator Transformers _rev 1.pptx
+~$*
 
 # local dev server logs
 /dev-server*.log
+/dashboard-*.log
+/launch-dashboard.cmd

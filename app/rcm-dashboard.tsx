@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, type CSSProperties, useMemo, useState } from "react";
 
 type CellValue = string | number | boolean | null;
 
@@ -128,14 +128,14 @@ const STRATEGIES = [
 ] as const;
 
 const CHART_COLORS = [
-  "#1f77b4",
-  "#e15759",
-  "#59a14f",
-  "#f28e2b",
-  "#76b7b2",
-  "#b07aa1",
-  "#edc949",
-  "#4e79a7",
+  "#0f67b1",
+  "#00a7d8",
+  "#00b894",
+  "#f58220",
+  "#ef4444",
+  "#7c3aed",
+  "#ffd166",
+  "#0b3d91",
 ];
 
 function normalizeHeader(value: CellValue) {
@@ -1141,21 +1141,35 @@ export default function RCMDashboard() {
     }
   }
 
+  const themeStyle = {
+    "--theme-bg": "url('aspirasi-rt2-theme.png')",
+  } as CSSProperties;
+
   return (
-    <main className="dashboard-shell">
+    <main className="dashboard-shell" style={themeStyle}>
       <section className="topbar">
-        <div>
+        <div className="topbar-title">
           <p className="eyebrow">RCM digital report</p>
           <h1>Reliability Centered Maintenance analyser</h1>
+          <p className="topbar-subtitle">Aspirasi RT2.0 styled maintenance intelligence for generation assets.</p>
         </div>
-        <div className="top-actions">
-          <label className="file-button">
-            <input accept=".xlsx,.xlsm" onChange={handleFile} type="file" />
-            {isLoading ? "Reading workbook..." : "Upload raw data"}
-          </label>
-          <button disabled={!summary || isExporting} onClick={handleExport} type="button">
-            {isExporting ? "Preparing PPT..." : "Export PowerPoint"}
-          </button>
+        <div className="topbar-right">
+          <div className="theme-lockup" aria-label="Aspirasi RT2.0 theme">
+            <span className="theme-mark" aria-hidden="true" />
+            <div>
+              <strong>ASPIRASI RT2.0</strong>
+              <small>Better. Brighter.</small>
+            </div>
+          </div>
+          <div className="top-actions">
+            <label className="file-button">
+              <input accept=".xlsx,.xlsm" onChange={handleFile} type="file" />
+              {isLoading ? "Reading workbook..." : "Upload raw data"}
+            </label>
+            <button disabled={!summary || isExporting} onClick={handleExport} type="button">
+              {isExporting ? "Preparing PPT..." : "Export PowerPoint"}
+            </button>
+          </div>
         </div>
       </section>
 
