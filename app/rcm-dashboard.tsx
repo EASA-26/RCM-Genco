@@ -1664,13 +1664,6 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             line-height: 1.45;
             max-width: 680px;
           }
-          .meta-grid {
-            border-top: 1px solid rgba(255,255,255,0.35);
-            display: grid;
-            gap: 12px;
-            grid-template-columns: repeat(4, 1fr);
-            padding-top: 20px;
-          }
           .cover-footer {
             display: grid;
             gap: 16px;
@@ -1700,20 +1693,13 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             margin-top: 26px;
             padding-top: 8px;
           }
-          .meta-grid span, .metric span, .section-kicker {
+          .metric span, .section-kicker {
             color: #5b708a;
             display: block;
             font-size: 10px;
             font-weight: 800;
             letter-spacing: 0;
             text-transform: uppercase;
-          }
-          .cover .meta-grid span { color: rgba(255,255,255,0.72); }
-          .meta-grid strong {
-            display: block;
-            font-size: 14px;
-            line-height: 1.35;
-            margin-top: 4px;
           }
           .page {
             padding: 0;
@@ -1849,12 +1835,6 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             <div class="subtitle">
               Dashboard-generated PDF summary for ${escapeHtml(meta.assetName)} using the uploaded raw RCM workbook data.
             </div>
-          </div>
-          <div class="meta-grid">
-            <div><span>Station</span><strong>${escapeHtml(meta.station || "-")}</strong></div>
-            <div><span>System</span><strong>${escapeHtml(meta.assetName || "-")}</strong></div>
-            <div><span>Analysis Date</span><strong>${escapeHtml(meta.analysisDate || "-")}</strong></div>
-            <div><span>Source</span><strong>${escapeHtml(summary.fileName)}</strong></div>
           </div>
           <div class="cover-footer">
             <div class="signoff"><span>Prepared By:</span><strong>${escapeHtml(meta.preparedBy || "-")}</strong></div>
