@@ -81,6 +81,7 @@ type ReportMeta = {
   auditDate: string;
   auditComments: string[];
   preparedBy: string;
+  approvedBy: string;
 };
 
 type SheetData = {
@@ -1639,6 +1640,35 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             grid-template-columns: repeat(4, 1fr);
             padding-top: 20px;
           }
+          .cover-footer {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: 1fr 1fr;
+            margin-top: 20px;
+          }
+          .signoff {
+            background: rgba(255,255,255,0.14);
+            border: 1px solid rgba(255,255,255,0.42);
+            border-radius: 8px;
+            min-height: 82px;
+            padding: 14px;
+          }
+          .signoff span {
+            color: rgba(255,255,255,0.78);
+            display: block;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0;
+            text-transform: uppercase;
+          }
+          .signoff strong {
+            border-top: 1px solid rgba(255,255,255,0.46);
+            display: block;
+            font-size: 16px;
+            line-height: 1.35;
+            margin-top: 26px;
+            padding-top: 8px;
+          }
           .meta-grid span, .metric span, .section-kicker {
             color: #5b708a;
             display: block;
@@ -1795,6 +1825,10 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             <div><span>Analysis Date</span><strong>${escapeHtml(meta.analysisDate || "-")}</strong></div>
             <div><span>Source</span><strong>${escapeHtml(summary.fileName)}</strong></div>
           </div>
+          <div class="cover-footer">
+            <div class="signoff"><span>Prepared By:</span><strong>${escapeHtml(meta.preparedBy || "-")}</strong></div>
+            <div class="signoff"><span>Approved by:</span><strong>${escapeHtml(meta.approvedBy || "-")}</strong></div>
+          </div>
         </section>
 
         <section class="page">
@@ -1873,6 +1907,8 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
               ["System", meta.assetName || "-"],
               ["Analysis Date", meta.analysisDate || "-"],
               ["Audit Date", meta.auditDate || "-"],
+              ["Prepared By", meta.preparedBy || "-"],
+              ["Approved by", meta.approvedBy || "-"],
               ["RCM ID", summary.metadata.rcmId || "-"],
               ["RCM Audit Comment", formatAuditComments(meta.auditComments) || "-"],
               ["Rows Analysed", summary.totalRows],
@@ -2158,6 +2194,7 @@ export default function RCMDashboard() {
     auditDate: "3rd October 2025",
     auditComments: loadSavedAuditComments(),
     preparedBy: "RCM Planning",
+    approvedBy: "",
   });
 
   useEffect(() => {
@@ -2334,6 +2371,20 @@ export default function RCMDashboard() {
             <input
               onChange={(event) => setReportMeta({ ...reportMeta, auditDate: event.target.value })}
               value={reportMeta.auditDate}
+            />
+          </label>
+          <label>
+            <span>Prepared By</span>
+            <input
+              onChange={(event) => setReportMeta({ ...reportMeta, preparedBy: event.target.value })}
+              value={reportMeta.preparedBy}
+            />
+          </label>
+          <label>
+            <span>Approved by</span>
+            <input
+              onChange={(event) => setReportMeta({ ...reportMeta, approvedBy: event.target.value })}
+              value={reportMeta.approvedBy}
             />
           </label>
           <label className="comment-field">
