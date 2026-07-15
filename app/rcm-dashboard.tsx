@@ -1315,6 +1315,53 @@ function setPowerPointGeometry(container: ParentNode, x: number, y: number, cx: 
   extent.setAttribute("cy", String(cy));
 }
 
+function stylePowerPointText(
+  container: ParentNode,
+  options: { bold?: boolean; color?: string; fontSize?: number; italic?: boolean; underline?: boolean },
+) {
+  for (const propertyName of ["rPr", "endParaRPr", "defRPr"]) {
+    for (const properties of elementsByLocalName(container, propertyName)) {
+      if (options.bold !== undefined) {
+        properties.setAttribute("b", options.bold ? "1" : "0");
+      }
+      if (options.italic !== undefined) {
+        properties.setAttribute("i", options.italic ? "1" : "0");
+      }
+      if (options.underline !== undefined) {
+        properties.setAttribute("u", options.underline ? "sng" : "none");
+      }
+      if (options.fontSize) {
+        properties.setAttribute("sz", String(options.fontSize));
+      }
+      if (options.color) {
+        let solidFill = firstElementByLocalName(properties, "solidFill");
+        if (!solidFill) {
+          solidFill = properties.ownerDocument.createElementNS(
+            "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "a:solidFill",
+          );
+          properties.appendChild(solidFill);
+        }
+        let color = firstElementByLocalName(solidFill, "srgbClr");
+        if (!color) {
+          color = properties.ownerDocument.createElementNS(
+            "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "a:srgbClr",
+          );
+          solidFill.appendChild(color);
+        }
+        color.setAttribute("val", options.color);
+      }
+    }
+  }
+}
+
+function setPowerPointParagraphAlignment(container: ParentNode, alignment: "ctr" | "l" | "r") {
+  for (const properties of elementsByLocalName(container, "pPr")) {
+    properties.setAttribute("algn", alignment);
+  }
+}
+
 function setTableCellText(cell: Element, value: CellValue) {
   setTextNodesText(cell, String(value ?? ""));
 }
@@ -1427,14 +1474,15 @@ function patchSystemBoundarySlide(xml: string) {
 function patchAuditSessionSlide(xml: string, meta: ReportMeta) {
   const doc = parseXml(xml);
   const auditComment = formatAuditComments(meta.auditComments);
-  const tableTop = 1660000;
-  const tableHeight = 4610000;
-  const tableLeft = 381000;
-  const tableWidth = 6925000;
-  const feedbackLeft = 7391643;
-  const feedbackWidth = 4251868;
-  const labelTop = 1080000;
-  const labelHeight = 360000;
+  const tableTop = 1670000;
+  const tableHeight = 4180000;
+  const tableLeft = 135000;
+  const tableWidth = 7000000;
+  const feedbackLeft = 7590000;
+  const feedbackWidth = 4540000;
+  const feedbackHeight = 4900000;
+  const metaTop = 1120000;
+  const titleTop = 1290000;
 
   for (const shape of [...elementsByLocalName(doc, "sp"), ...elementsByLocalName(doc, "graphicFrame")]) {
     const fullText = elementsByLocalName(shape, "t")
@@ -1443,9 +1491,10 @@ function patchAuditSessionSlide(xml: string, meta: ReportMeta) {
 
     if (fullText.includes("No.NameRolePosition") || fullText.includes("Venue")) {
       if (fullText.includes("Venue")) {
-        setTextNodesText(shape, "System \t\t:\nVenue \t\t:\nAnalysis date \t:");
-        setPowerPointGeometry(shape, tableLeft, labelTop, 4400000, labelHeight);
+        setTextNodesText(shape, "System :\t\t\t\tVenue :\nAnalysis date:");
+        setPowerPointGeometry(shape, tableLeft, metaTop, tableWidth, 470000);
         forcePlainPowerPointText(shape);
+        stylePowerPointText(shape, { bold: false, fontSize: 1800, underline: false });
       } else {
         setTextNodesText(shape, "");
         setPowerPointGeometry(shape, tableLeft, tableTop, tableWidth, tableHeight);
@@ -1454,14 +1503,17 @@ function patchAuditSessionSlide(xml: string, meta: ReportMeta) {
 
     if (fullText.includes("The management of")) {
       setTextNodesText(shape, "RCM Audit Feedback");
-      setPowerPointGeometry(shape, feedbackLeft, labelTop + 110000, feedbackWidth, 250000);
+      setPowerPointGeometry(shape, feedbackLeft, titleTop, feedbackWidth, 270000);
       forcePlainPowerPointText(shape);
+      stylePowerPointText(shape, { bold: false, color: "1F4E79", fontSize: 1800, italic: true, underline: false });
+      setPowerPointParagraphAlignment(shape, "ctr");
     }
 
     if (fullText.includes("Auditors")) {
       setTextNodesText(shape, auditComment);
-      setPowerPointGeometry(shape, feedbackLeft, tableTop, feedbackWidth, tableHeight);
+      setPowerPointGeometry(shape, feedbackLeft, tableTop, feedbackWidth, feedbackHeight);
       forcePlainPowerPointText(shape);
+      setPowerPointParagraphAlignment(shape, "l");
     }
   }
 
