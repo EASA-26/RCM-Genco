@@ -1625,7 +1625,7 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             padding: 38px;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
+            justify-content: flex-start;
             page-break-after: always;
           }
           .cover-top, .report-top {
@@ -1650,11 +1650,14 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             text-transform: uppercase;
           }
           .rcm-mark img { border-radius: 5px; height: 42px; object-fit: cover; width: 42px; }
+          .cover-title {
+            margin-top: 46px;
+          }
           .cover h1 {
             font-size: 46px;
             letter-spacing: 0;
             line-height: 1.05;
-            margin: 80px 0 12px;
+            margin: 0 0 12px;
             max-width: 720px;
           }
           .cover .subtitle {
@@ -1668,7 +1671,7 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             display: grid;
             gap: 16px;
             grid-template-columns: 1fr 1fr;
-            margin-top: 20px;
+            margin-top: auto;
           }
           .signoff {
             background: rgba(255,255,255,0.14);
@@ -1830,7 +1833,7 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             <div class="rcm-mark"><img src="${rcmIconUrl}" alt="" /> RCM Genco</div>
             <div class="brand"><img src="${logoUrl}" alt="TNB Genco" /></div>
           </div>
-          <div>
+          <div class="cover-title">
             <h1>Reliability Centered Maintenance Analysis Report</h1>
             <div class="subtitle">
               Dashboard-generated PDF summary for ${escapeHtml(meta.assetName)} using the uploaded raw RCM workbook data.
