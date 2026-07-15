@@ -2030,6 +2030,30 @@ function MetricCard({ label, value, note }: { label: string; value: number | str
   );
 }
 
+const VISITOR_COUNTER_URL =
+  "https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Feasa-26.github.io%2FRCM-Genco%2F&label=Total%20visits&labelColor=%2307518e&countColor=%23f26a2e&style=flat-square";
+
+function VisitorCounter() {
+  const [isAvailable, setIsAvailable] = useState(true);
+
+  return (
+    <div className="visitor-counter">
+      <span>Website visits</span>
+      {isAvailable ? (
+        <img
+          alt="Total website visits"
+          loading="lazy"
+          onError={() => setIsAvailable(false)}
+          referrerPolicy="no-referrer"
+          src={VISITOR_COUNTER_URL}
+        />
+      ) : (
+        <strong>Counter unavailable</strong>
+      )}
+    </div>
+  );
+}
+
 export default function RCMDashboard() {
   const [summary, setSummary] = useState<AnalysisSummary | null>(null);
   const [error, setError] = useState("");
@@ -2201,6 +2225,7 @@ export default function RCMDashboard() {
             <strong>{summary?.fileName ?? "No workbook loaded"}</strong>
             <small>{summary ? `${summary.sheetName} - ${summary.totalRows} RCM rows` : "Awaiting upload"}</small>
           </div>
+          <VisitorCounter />
         </aside>
 
         <section className="main-panel">

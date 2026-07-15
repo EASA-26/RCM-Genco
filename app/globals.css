@@ -304,6 +304,53 @@ button:disabled {
   color: var(--muted);
 }
 
+.visitor-counter {
+  background:
+    linear-gradient(135deg, rgba(7, 81, 142, 0.95), rgba(8, 120, 201, 0.82)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(6, 44, 86, 0.18);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  overflow: hidden;
+  padding: 0.9rem;
+  position: relative;
+}
+
+.visitor-counter::after {
+  background: linear-gradient(125deg, transparent 0 61%, rgba(85, 216, 255, 0.28) 61.2% 63%, transparent 63.4%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.visitor-counter > * {
+  position: relative;
+}
+
+.visitor-counter span {
+  color: #bdf2ff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.visitor-counter img {
+  align-self: flex-start;
+  display: block;
+  height: 1.45rem;
+  max-width: 100%;
+}
+
+.visitor-counter strong {
+  color: white;
+  font-size: 0.95rem;
+}
+
 .main-panel {
   display: flex;
   flex-direction: column;
