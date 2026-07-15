@@ -1719,6 +1719,7 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
         <title>RCM Genco PDF Report - ${escapeHtml(meta.assetName)}</title>
         <style>
           @page { margin: 14mm; size: A4; }
+          @page comparisonPage { margin: 8mm; size: A4 landscape; }
           * { box-sizing: border-box; }
           body {
             color: #12233b;
@@ -1817,6 +1818,9 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
           .page {
             padding: 0;
             page-break-after: always;
+          }
+          .comparison-page {
+            page: comparisonPage;
           }
           .report-top {
             border-bottom: 3px solid #0878c9;
@@ -1917,8 +1921,26 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
             vertical-align: top;
           }
           tbody tr:nth-child(even) td { background: #f7fbff; }
-          .comparison td:nth-child(4),
-          .comparison td:nth-child(6) { min-width: 130px; }
+          .comparison table {
+            table-layout: fixed;
+          }
+          .comparison th,
+          .comparison td {
+            font-size: 8px;
+            line-height: 1.22;
+            overflow-wrap: anywhere;
+            padding: 4px 3px;
+            word-break: break-word;
+          }
+          .comparison th:nth-child(1), .comparison td:nth-child(1) { width: 4%; }
+          .comparison th:nth-child(2), .comparison td:nth-child(2) { width: 12%; }
+          .comparison th:nth-child(3), .comparison td:nth-child(3) { width: 21%; }
+          .comparison th:nth-child(4), .comparison td:nth-child(4) { width: 15%; }
+          .comparison th:nth-child(5), .comparison td:nth-child(5) { width: 8%; }
+          .comparison th:nth-child(6), .comparison td:nth-child(6) { width: 18%; }
+          .comparison th:nth-child(7), .comparison td:nth-child(7) { width: 8%; }
+          .comparison th:nth-child(8), .comparison td:nth-child(8) { width: 7%; }
+          .comparison th:nth-child(9), .comparison td:nth-child(9) { width: 7%; }
           .note {
             color: #5b708a;
             font-size: 11px;
@@ -1996,7 +2018,7 @@ function exportPdfReport(summary: AnalysisSummary, meta: ReportMeta) {
           <div class="footer">Generated ${escapeHtml(generatedAt)} from ${escapeHtml(summary.sheetName)} - ${summary.totalRows} RCM rows.</div>
         </section>
 
-        <section class="page">
+        <section class="page comparison-page">
           <header class="report-top">
             <div>
               <span class="section-kicker">Maintenance Plan Comparison</span>
